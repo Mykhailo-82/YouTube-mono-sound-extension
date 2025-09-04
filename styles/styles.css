@@ -140,7 +140,12 @@ footer {
 .footer__link {
   padding: 0 5px;
   cursor: pointer;
+  color: #666;
+  text-decoration: none;
+  transition: all 0.2s;
 }
 
-
+.footer__link:hover {
+  color: #b6b6b6;
+}
 
