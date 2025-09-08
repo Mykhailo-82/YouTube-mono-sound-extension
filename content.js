@@ -68,7 +68,7 @@ function createToggleButton(state) {
 
   const text = document.createElement("p");
   text.className = "mono-sound__text";
-  text.textContent = state ? "Disable Mono" : "Enable Mono";
+  text.textContent = state ? textContentObj.disableMono || 'Disable Mono' : textContentObj.enableMono || 'Enable Mono';
 
   btn.append(icon, text);
 
@@ -76,7 +76,7 @@ function createToggleButton(state) {
     state = !state;
     await chrome.storage.sync.set({ monoEnabled: state });
     icon.classList.toggle("mono-sound--disabled", !state);
-    text.textContent = state ? "Disable Mono" : "Enable Mono";
+    text.textContent = state ? textContentObj.disableMono || 'Disable Mono' : textContentObj.enableMono || 'Enable Mono';
     setMono(state);
   });
 
@@ -95,30 +95,76 @@ function observeMenu(state) {
   new MutationObserver(inject).observe(document.body, { childList: true, subtree: true });
 }
 
+// ------------- language -------------
+let textContentObj = {}
+
+async function getLang() {
+  const data = await chrome.storage.sync.get({ lang: 'en' });
+  const languageSaved = data.lang;
+
+  try {
+    const url = chrome.runtime.getURL(`locales/${languageSaved}.json`);
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    textContentObj = await res.json();
+  } catch (err) {
+    console.error('loadLanguage error', err);
+  }
+
+  console.log(textContentObj)
+}
+
+
+function updateTextContent() {
+  const btnText = document.querySelector(".mono-sound__text");
+  const btnIcon = document.querySelector(".mono-sound__image-wrapper");
+
+  if (!btnText || !btnIcon) return;
+
+  const state = !btnIcon.classList.contains("mono-sound--disabled");
+  btnText.textContent = state ? textContentObj.disableMono || 'Disable Mono' : textContentObj.enableMono || 'Enable Mono';
+}
+
 // ------------- Init -------------
 (async function init() {
   await ensureAudioContext();
   let { monoEnabled = false } = await chrome.storage.sync.get("monoEnabled");
+
+  await getLang();
 
   observeMenu(monoEnabled);
   observeVideos();
   setMono(monoEnabled);
 })();
 
-
-
 // ------------- popup.js -------------
-
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
-  if (!msg || msg.action !== 'SET_MONO') return;
-  try {
-    setMono(Boolean(msg.value));
-    sendResponse && sendResponse({ ok: true });
-  } catch (err) {
-    console.error('SET MONO handler error:', err);
-    sendResponse && sendResponse({ ok: false, error: String(err) });
+  if (!msg) return;
+  if (msg.action === 'SET_MONO'){
+    try {
+      setMono(Boolean(msg.value));
+      sendResponse && sendResponse({ ok: true });
+    } catch (err) {
+      console.error('SET MONO handler error:', err);
+      sendResponse && sendResponse({ ok: false, error: String(err) });
+    }
   }
-  return false;
+
+  if (msg.action === 'languageChanged') {
+    (async () => {
+      try {
+        console.log('new lang')
+        await getLang();
+        updateTextContent();
+        sendResponse && sendResponse({ ok: true });
+      } catch (err) {
+        console.error('languageChanged handler error:', err);
+        sendResponse && sendResponse({ ok: false, error: String(err) });
+      }
+    })();
+  }
+
+  return true;
 });
 
 chrome.storage.onChanged.addListener((changes, area) => {

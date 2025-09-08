@@ -15,5 +15,11 @@
       "js": ["content.js"],
       "run_at": "document_idle"
     }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["locales/*.json"],
+      "matches": ["<all_urls>"]
+    }
   ]
 }

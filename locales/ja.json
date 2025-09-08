@@ -1,0 +1,6 @@
+{
+  "headerTitle": "YouTube Mono Sound",
+  "headerDescription": "YouTubeのすべての動画でモノラル音声をオンにする",
+  "enableMono": "モノラルを有効にする",
+  "disableMono": "モノラルを無効にする"
+}

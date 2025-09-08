@@ -59,16 +59,99 @@ body {
   cursor: default;
 }
 
-h1 {
+.languages {
+  background-color: #2a2a2a;
+  position: fixed;
+  left: 20px;
+  right: 20px;
+  top: 0;
+  bottom: 0;
+  margin: 0;
+  padding: 0;
+  overflow-y: scroll;
+  z-index: 3;
+  transform: translateY(-100vh);
+  transition: all 0.8s;
+  display: none;
+
+  scrollbar-color: #666 #2a2a2a; /* Firefox */
+  scrollbar-width: thin;             /* Firefox */
+}
+/* Chrome / Edge / Safari */
+.languages::-webkit-scrollbar {
+  width: 8px;
+}
+.languages::-webkit-scrollbar-track {
+  background: #2a2a2a;
+}
+.languages::-webkit-scrollbar-thumb {
+  background: #666;
+  border-radius: 4px;
+}
+.languages::-webkit-scrollbar-thumb:hover {
+  background: #888;
+}
+
+
+.languages--active {
+  transform: translateY(0);
+  display: block;
+}
+
+.languages__list {
+  list-style: none;
+  padding: 0;
+  cursor: pointer;
+}
+
+.languages__list-option {
+  background-color: #2a2a2a;
+  color: #fff;
+  text-align: center;
+  font-size: 1.25rem;
+  padding: 10px 0;
+  border-bottom: 2px solid #666;
+  transition: all 0.2s;
+}
+
+.languages__list-option:hover {
+  background-color: #444;
+}
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-content: center;
+  margin: 0 0 15px 0;
+}
+
+.header__title {
   font-size: 18px;
   font-weight: 600;
-  margin: 0 0 15px 0;
+  margin: 0;
   color: #fff;
   border-left: 4px solid #ff0000;
   padding-left: 8px;
 }
 
-p {
+.language-settings {
+  background-color: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 5px 0 5px 5px;
+}
+
+.language-settings i {
+  color: #fff;
+  transition: transform 0.3s ease;
+}
+
+.language-settings:hover i {
+  color: #ccc;
+  transform: rotate(360deg);
+}
+
+.header__description {
   font-size: 13px;
   margin: 0 0 16px 0;
   color: #ccc;
