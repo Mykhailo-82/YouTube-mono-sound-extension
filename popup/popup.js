@@ -1,32 +1,46 @@
-// popup/popup.js
+// --- API ---
+const browserAPI = typeof browser !== 'undefined' ? browser : chrome;
 
-// ------------- polyfill -------------
-if (typeof browser === 'undefined') {
-  var browser = (function () {
-    return window.chrome || {};
-  })();
+const storageGet = async (key) => {
+  try {
+    const result = await browserAPI.storage.local.get(key);
+    return result;
+  } catch (err) {
+    console.error('Storage get error:', err);
+    return typeof key === 'string' ? {} : { ...key };
+  }
+};
+
+const storageSet = async (data) => {
+  try {
+    await browserAPI.storage.local.set(data);
+  } catch (err) {
+    console.error('Storage set error:', err);
+  }
+};
+
+const queryTabs = async (query) => {
+  try {
+    return await browserAPI.tabs.query(query);
+  } catch (err) {
+    console.error('Query tabs error:', err);
+    return [];
+  }
+};
+
+async function sendMessage(tabId, message) {
+  if (!tabId) return false;
+  try {
+    await browserAPI.tabs.sendMessage(tabId, message);
+    return true;
+  } catch (err) {
+    console.error('Send message error:', err);
+    return false;
+  }
 }
 
-const storageGet = (key) => browser.storage.sync.get(key);
-const storageSet = (data) => browser.storage.sync.set(data);
-const queryTabs = (query) => browser.tabs.query(query);
-const sendMessage = (tabId, message) => browser.tabs.sendMessage(tabId, message);
-
-
-// ------------- language -------------
+// --- language ---
 let textContentObj = {};
-
-// const chromeStorageGet = (key) =>
-//   new Promise((resolve) => chrome.storage.sync.get(key, resolve));
-
-// const chromeStorageSet = (data) =>
-//   new Promise((resolve) => chrome.storage.sync.set(data, resolve));
-
-// const sendMessage = (tabId, message) =>
-//   new Promise((resolve) => {
-//     chrome.tabs.sendMessage(tabId, message, () => { resolve(!chrome.runtime.lastError); }
-//   );
-// });
 
 window.addEventListener('DOMContentLoaded', async () => {
   const languageSaved = localStorage.getItem('lang') || 'en';
@@ -36,7 +50,7 @@ window.addEventListener('DOMContentLoaded', async () => {
 
 async function loadLanguage(language) {
   try {
-    const res = await fetch(`../locales/${language}.json`);
+    const res = await fetch(`../_locales/${language}/ui.json`);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
 
     textContentObj = await res.json();
@@ -68,13 +82,12 @@ document.getElementById('languages').addEventListener('click', async (e) => {
   document.getElementById('languages').classList.remove('languages--active');
 });
 
-// ---------- UI ----------
+// --- UI ---
 async function updateTextContent() {
   document.getElementById('header__title').textContent =
     textContentObj.headerTitle || 'YouTube Mono Sound';
   document.getElementById('header__description').textContent =
-    textContentObj.headerDescription ||
-    'Turn on mono sound for all videos on YouTube';
+    textContentObj.headerDescription || 'Turn on mono sound for all videos on YouTube';
 
   const data = await storageGet('monoEnabled');
   updateUI(Boolean(data.monoEnabled));
@@ -92,7 +105,7 @@ function updateUI(enabled) {
     : textContentObj.enableMono || 'Enable Mono';
 }
 
-// ---------- switch logic ----------
+// --- switch logic ---
 if (!switchContainer) {
   console.warn('popup: switch container not found');
 } else {
@@ -106,17 +119,16 @@ if (!switchContainer) {
     const activeTabs = await queryTabs({ active: true, currentWindow: true });
     const activeTab = activeTabs[0];
 
-    if (activeTab?.id &&
-       (activeTab.url?.startsWith('https://www.youtube.com') ||
-       activeTab.url?.startsWith('https://music.youtube.com'))
-    ){
-      const success = await sendMessage(activeTab.id, {
-        action: 'SET_MONO',
-        value: newValue,
-      });
+    let success = false;
+    if (
+      activeTab?.id &&
+      (activeTab.url?.startsWith('https://www.youtube.com') ||
+        activeTab.url?.startsWith('https://music.youtube.com'))
+    ) {
+      success = await sendMessage(activeTab.id, { action: 'SET_MONO', value: newValue });
+    }
 
-      if (!success) await broadcastToYouTubeTabs(newValue);
-    } else {
+    if (!success) {
       await broadcastToYouTubeTabs(newValue);
     }
   });
@@ -124,10 +136,7 @@ if (!switchContainer) {
 
 async function broadcastToYouTubeTabs(newValue) {
   const ytTabs = await queryTabs({
-    url: [
-      '*://www.youtube.com/*',
-      '*://music.youtube.com/*'
-    ]
+    url: ['*://www.youtube.com/*', '*://music.youtube.com/*'],
   });
 
   for (const tab of ytTabs) {
