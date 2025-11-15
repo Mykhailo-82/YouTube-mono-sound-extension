@@ -1,22 +1,29 @@
 {
   "manifest_version": 3,
-  "name": "YouTube Mono Sound",
-  "version": "1.1",
-  "description": "Перемикач моно/стерео для YouTube",
-  "icons": {
-    "16": "/icons/YouTubeMonoSound.png",
-    "32": "/icons/YouTubeMonoSound.png",
-    "48": "/icons/YouTubeMonoSound.png",
-    "128": "/icons/YouTubeMonoSound.png"
+  "version": "2",
+  "default_locale": "en",
+  "name": "__MSG_extensionName__",
+  "description": "__MSG_extensionDescription__",
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "{8be5accd-4b22-4d70-9beb-05455a7ea9e0}",
+      "strict_min_version": "109.0"
+    }
   },
-  "permissions": ["scripting", "storage"],
-"host_permissions": [
-  "https://www.youtube.com/*",
-  "https://music.youtube.com/*"
-],
+  "icons": {
+    "16": "icons/YouTubeMonoSound32.png",
+    "32": "icons/YouTubeMonoSound32.png",
+    "48": "icons/YouTubeMonoSound48.png",
+    "128": "icons/YouTubeMonoSound128.png"
+  },
+  "permissions": ["storage", "activeTab"],
+  "host_permissions": [
+    "https://www.youtube.com/*",
+    "https://music.youtube.com/*"
+  ],
   "action": {
-    "default_icon": "/icons/YouTubeMonoSound.png",
-    "default_popup": "/popup/popup.html"
+    "default_icon": "icons/YouTubeMonoSound.png",
+    "default_popup": "popup/popup.html"
   },
   "content_scripts": [
     {
@@ -25,14 +32,14 @@
         "https://music.youtube.com/*"
       ],
       "css": ["styles/styles.css"],
-      "js": ["browser-polyfill.js", "content.js"],
-      "run_at": "document_idle"
+      "js": ["content.js"],
+      "run_at": "document_end"
     }
   ],
   "web_accessible_resources": [
     {
-      "resources": ["locales/*.json"],
-      "matches": ["<all_urls>"]
+      "resources": ["_locales/*/*.json"],
+      "matches": ["https://www.youtube.com/*", "https://music.youtube.com/*"]
     }
   ]
 }
