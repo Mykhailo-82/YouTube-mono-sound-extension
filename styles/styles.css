@@ -12,6 +12,9 @@
 .mono-sound:hover {
   background-color: #ffffff33;
 }
+.mono-sound:hover.light {
+  background-color: #f2f2f2;
+}
 
 .mono-sound__image-wrapper {
   margin: 0 12px 0 0;
@@ -27,6 +30,9 @@
   font-size: 1.4rem;
   line-height: 2rem;
   color: #f1f1f1;
+}
+.mono-sound__text.light {
+  color: #0f0f0f;
 }
 
 .mono-sound__image-wrapper.mono-sound--disabled::after {
