@@ -1,5 +1,25 @@
 /* styles/styles.css */
 
+/* ------------- YouTube container ------------- */
+ytd-menu-popup-renderer:has([data-mono-button="true"]),
+ytmusic-menu-popup-renderer:has([data-mono-button="true"]),
+tp-yt-iron-dropdown:has([data-mono-button="true"]) {
+  height: auto !important;
+  max-height: none !important;
+}
+
+tp-yt-iron-dropdown:has([data-mono-button="true"]) #contentWrapper {
+  height: auto !important;
+  max-height: none !important;
+  overflow: visible !important;
+}
+
+.tp-yt-paper-listbox:has([data-mono-button="true"]) {
+  height: auto !important;
+  max-height: none !important;
+  overflow-y: hidden !important; 
+}
+
 /* ------------- YouTube button ------------- */
 .mono-sound {
   padding: 0 12px 0 16px;

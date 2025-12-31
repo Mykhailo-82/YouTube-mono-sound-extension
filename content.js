@@ -1,3 +1,4 @@
+// content.js
 // --- API ---
 const browserAPI = typeof browser !== 'undefined' ? browser : chrome;
 
@@ -6,7 +7,6 @@ const storageGet = async (key) => {
     const result = await browserAPI.storage.local.get(key);
     return result;
   } catch (err) {
-    console.error('Storage get error:', err);
     return typeof key === 'string' ? {} : { ...key };
   }
 };
@@ -19,17 +19,22 @@ const storageSet = async (data) => {
   }
 };
 
-// --- Audio ---
+// --- Audio Logic ---
+let currentMonoEnabled = false;
+async function syncMonoState() {
+  const data = await storageGet('monoEnabled');
+  currentMonoEnabled = Boolean(data.monoEnabled);
+}
+
 const ctx = new (window.AudioContext || window.webkitAudioContext)();
 const processed = new WeakMap();
-const videos = new Set();
 
 async function ensureAudioContext() {
   if (ctx.state === 'suspended') {
-    try {
-      await ctx.resume();
-    } catch (err) {
-      console.error('AudioContext resume error:', err);
+    try { 
+      await ctx.resume(); 
+    } catch (e) {
+      console.error('AudioContext resume failed:', e);
     }
   }
 }
@@ -38,76 +43,189 @@ function connectVideo(video) {
   if (processed.has(video)) return processed.get(video);
 
   try {
-    const wasPlaying = !video.paused && !video.ended;
-    const source = ctx.createMediaElementSource(video);
+    if (ctx.state === 'suspended') ctx.resume();
 
+    const source = ctx.createMediaElementSource(video);
     const stereoGain = ctx.createGain();
+    const monoGain = ctx.createGain();
+    
     source.connect(stereoGain).connect(ctx.destination);
 
     const splitter = ctx.createChannelSplitter(2);
-    source.connect(splitter);
-
-    const allpassL = ctx.createBiquadFilter();
-    allpassL.type = 'allpass';
-    allpassL.frequency.value = 1000;
-    allpassL.Q.value = 0.707;
-
-    const allpassR = ctx.createBiquadFilter();
-    allpassR.type = 'allpass';
-    allpassR.frequency.value = 1000;
-    allpassR.Q.value = 0.707;
-
-    splitter.connect(allpassL, 0);
-    splitter.connect(allpassR, 1);
-
-    const gainL = ctx.createGain();
-    const gainR = ctx.createGain();
-    gainL.gain.value = 0.7071;
-    gainR.gain.value = 0.7071;
-
-    allpassL.connect(gainL);
-    allpassR.connect(gainR);
-
-    const sumNode = ctx.createGain();
-    gainL.connect(sumNode);
-    gainR.connect(sumNode);
-
     const merger = ctx.createChannelMerger(1);
-    sumNode.connect(merger, 0, 0);
+    const sumNode = ctx.createGain();
+    sumNode.gain.value = 0.7071;
 
-    const monoGain = ctx.createGain();
-    merger.connect(monoGain).connect(ctx.destination);
+    source.connect(splitter);
+    splitter.connect(sumNode, 0);
+    splitter.connect(sumNode, 1);
+    sumNode.connect(merger).connect(monoGain).connect(ctx.destination);
+
+    monoGain.gain.value = currentMonoEnabled ? 1 : 0;
+    stereoGain.gain.value = currentMonoEnabled ? 0 : 1;
 
     const node = { stereoGain, monoGain };
     processed.set(video, node);
-    videos.add(video);
-
-    if (wasPlaying) video.play().catch(() => {});
-    
     return node;
   } catch (err) {
-    console.error('Error connecting video:', err);
     return null;
   }
 }
 
 function setMono(enabled) {
-  videos.forEach((v) => {
+  const activeVideos = document.querySelectorAll('video');
+  activeVideos.forEach((v) => {
     const node = processed.get(v);
     if (!node) return;
-    node.monoGain.gain.value = enabled ? 1 : 0;
-    node.stereoGain.gain.value = enabled ? 0 : 1;
+    
+    const time = ctx.currentTime;
+    node.monoGain.gain.setTargetAtTime(enabled ? 1 : 0, time, 0.01);
+    node.stereoGain.gain.setTargetAtTime(enabled ? 0 : 1, time, 0.01);
   });
+}
+
+// --- Language & UI ---
+let textContentObj = { enableMono: 'Enable Mono', disableMono: 'Disable Mono' };
+let isAddingButton = false;
+
+async function loadLanguage() {
+  try {
+    const data = await storageGet('lang');
+    const lang = data.lang || 'en';
+    if (textContentObj.isLoaded) return; 
+
+    const url = browserAPI.runtime.getURL(`_locales/${lang}/ui.json`);
+    const res = await fetch(url);
+    
+    if (res.ok) {
+      textContentObj = await res.json();
+      textContentObj.isLoaded = true;
+    } else {
+      console.warn(`[Mono] Locale ${lang} not found, falling back to EN`);
+      textContentObj.isLoaded = true;
+    }
+  } catch (err) {
+    textContentObj.isLoaded = true; 
+    console.error('[Mono] Language load critical error');
+  }
+}
+
+function isLightTheme() {
+  return !document.documentElement.hasAttribute('dark') && !document.querySelector('html').hasAttribute('dark');
+}
+
+async function createToggleButton() {
+  const data = await storageGet('monoEnabled');
+  const isEnabled = Boolean(data.monoEnabled);
+  const lightTheme = isLightTheme();
+
+  const btn = document.createElement('div');
+  btn.className = 'mono-sound';
+  btn.dataset.monoButton = 'true';
+  if (lightTheme) btn.classList.add('light');
+
+  const iconWrapper = document.createElement('div');
+  iconWrapper.className = 'mono-sound__image-wrapper';
+  if (!isEnabled) iconWrapper.classList.add('mono-sound--disabled');
+
+  const svgNS = 'http://www.w3.org/2000/svg';
+  const svg = document.createElementNS(svgNS, 'svg');
+  svg.setAttribute('width', '24');
+  svg.setAttribute('height', '24');
+  svg.setAttribute('viewBox', '0 0 24 24');
+  svg.style.pointerEvents = 'none';
+
+  const path = document.createElementNS(svgNS, 'path');
+  path.setAttribute('fill', 'none');
+  path.setAttribute('stroke-width', '1.5');
+  path.setAttribute('stroke', lightTheme ? '#0f0f0f' : '#f1f1f1');
+  path.setAttribute('d', 'M 3 11 L 3 13 M 6 8 L 6 16 M 9 10 L 9 14 M 12 7 L 12 17 M 15 4 L 15 20 M 18 9 L 18 15 M 21 11 L 21 13');
+
+  svg.appendChild(path);
+  iconWrapper.appendChild(svg);
+
+  const text = document.createElement('p');
+  text.className = 'mono-sound__text';
+  if (lightTheme) text.classList.add('light');
+  text.textContent = isEnabled ? textContentObj.disableMono : textContentObj.enableMono;
+
+  btn.append(iconWrapper, text);
+
+  btn.addEventListener('click', async (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const currentData = await storageGet('monoEnabled');
+    const newState = !Boolean(currentData.monoEnabled);
+    await storageSet({ monoEnabled: newState });
+    await ensureAudioContext();
+  });
+
+  return btn;
+}
+
+// --- Observers ---
+
+const listSelectors = [
+  'tp-yt-paper-listbox#items',
+  'ytmusic-menu-popup-renderer #items',
+  '.style-scope.ytmusic-menu-popup-renderer',
+  '#primary-items'
+];
+
+let menuTimeout;
+
+function observeMenu() {
+  const menuObserver = new MutationObserver(() => {
+    clearTimeout(menuTimeout);
+    menuTimeout = setTimeout(handleMenuChange, 100);
+  });
+
+  menuObserver.observe(document.body, { 
+    childList: true, 
+    subtree: true 
+  });
+}
+
+async function handleMenuChange() {
+  if (isAddingButton) return;
+
+  const targetList = document.querySelector(listSelectors.join(', '));
+
+  if (!targetList || targetList.querySelector('[data-mono-button="true"]')) return;
+
+  isAddingButton = true;
+  try {
+    const newBtn = await createToggleButton();
+    targetList.appendChild(newBtn);
+    
+    const container = targetList.closest('ytd-menu-popup-renderer, ytmusic-menu-popup-renderer, tp-yt-iron-dropdown');
+    if (container) {
+      container.classList.add('mono-menu-active');
+      if (typeof container.notifyResize === 'function') container.notifyResize();
+    }
+    
+    window.dispatchEvent(new Event('resize'));
+    
+  } catch (err) {
+    console.error('[Mono] Injection failed:', err);
+  } finally {
+    isAddingButton = false;
+  }
 }
 
 function observeVideos() {
   document.querySelectorAll('video').forEach(connectVideo);
 
   const observer = new MutationObserver((mutations) => {
-    mutations.forEach((m) => {
-      m.addedNodes.forEach((n) => {
-        if (n.tagName === 'VIDEO') connectVideo(n);
-        else if (n.querySelectorAll) n.querySelectorAll('video').forEach(connectVideo);
+    mutations.forEach((mutation) => {
+      mutation.addedNodes.forEach((node) => {
+        if (!(node instanceof HTMLElement)) return;
+
+        if (node.tagName === 'VIDEO') {
+          connectVideo(node);
+        } else {
+          node.querySelectorAll('video').forEach(connectVideo);
+        }
       });
     });
   });
@@ -115,117 +233,50 @@ function observeVideos() {
   observer.observe(document.body, { childList: true, subtree: true });
 }
 
-// --- Language ---
-let textContentObj = {};
-
-async function getLang() {
-  try {
-    const data = await storageGet('lang');
-    const lang = data.lang || 'en';
-    const url = browserAPI.runtime.getURL(`_locales/${lang}/ui.json`);
-    const res = await fetch(url);
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    textContentObj = await res.json();
-  } catch (err) {
-    console.error('loadLanguage error:', err);
-    textContentObj = { enableMono: 'Enable Mono', disableMono: 'Disable Mono' };
-  }
-}
-
-// --- Theme ---
-function isLightTheme() {
-  return !document.documentElement.hasAttribute('dark');
-}
-
-// --- Button ---
-function createToggleButton(state) {
-  const lightTheme = !document.documentElement.hasAttribute('dark');
-
-  const btn = document.createElement('div');
-  btn.className = 'mono-sound';
-  btn.dataset.monoButton = 'true';
-  btn.style.userSelect = 'none';
-  if (lightTheme) btn.classList.add('light');
-
-  const icon = document.createElement('div');
-  icon.className = `mono-sound__image-wrapper${state ? '' : ' mono-sound--disabled'}`;
-  icon.innerHTML = `
-    <svg class="mono-sound__icon" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24">
-      <path style="fill:none;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round;stroke:${lightTheme ? '#0f0f0f' : '#f1f1f1'};"
-      d="M 3 11 L 3 13 M 6 8 L 6 16 M 9 10 L 9 14 M 12 7 L 12 17 M 15 4 L 15 20 M 18 9 L 18 15 M 21 11 L 21 13"/>
-    </svg>
-  `;
-
-  const text = document.createElement('p');
-  text.className = 'mono-sound__text';
-  if (lightTheme) text.classList.add('light');
-  text.textContent = state ? textContentObj.disableMono : textContentObj.enableMono;
-
-  btn.append(icon, text);
-
-  btn.addEventListener('click', async () => {
-    state = !state;
-    await storageSet({ monoEnabled: state });
-    icon.classList.toggle('mono-sound--disabled', !state);
-    text.textContent = state ? textContentObj.disableMono : textContentObj.enableMono;
-    setMono(state);
-  });
-
-  return btn;
-}
-
-function observeMenu(state) {
-  const listSelector = 'tp-yt-paper-listbox#items';
-
-  const observer = new MutationObserver(() => {
-    const list = document.querySelector(listSelector);
-    if (list && !list.querySelector('[data-mono-button]')) {
-      list.appendChild(createToggleButton(state));
-    }
-  });
-
-  // спостереження за body, щоб підхоплювати появу меню
-  observer.observe(document.body, { childList: true, subtree: true });
-}
-
-
-// --- Initialization ---
+// --- Init ---
 (async function init() {
-  await ensureAudioContext();
+  await loadLanguage();
   const data = await storageGet('monoEnabled');
-  const monoEnabled = data.monoEnabled || false;
-
-  await getLang();
-
-  observeMenu(monoEnabled);
+  await syncMonoState();
+  
+  observeMenu();
   observeVideos();
-  setMono(monoEnabled);
+  
+  setTimeout(() => {
+    setMono(Boolean(data.monoEnabled));
+  }, 1000);
 })();
 
 // --- Listeners ---
-browserAPI.runtime.onMessage.addListener((msg, sender, sendResponse) => {
-  if (!msg) return;
-  if (msg.action === 'SET_MONO') {
-    setMono(Boolean(msg.value));
-    sendResponse({ ok: true });
-    return true;
-  }
+browserAPI.storage.onChanged.addListener((changes) => {
+  if (changes.monoEnabled) {
+    const newValue = Boolean(changes.monoEnabled.newValue);
+    currentMonoEnabled = newValue;
+    setMono(newValue);
 
-  if (msg.action === 'languageChanged') {
-    (async () => {
-      await getLang();
-      const btnText = document.querySelector('.mono-sound__text');
-      const btnIcon = document.querySelector('.mono-sound__image-wrapper');
-      if (btnText && btnIcon) {
-        const state = !btnIcon.classList.contains('mono-sound--disabled');
-        btnText.textContent = state ? textContentObj.disableMono : textContentObj.enableMono;
-      }
-      sendResponse({ ok: true });
-    })();
-    return true;
+    const btnIcon = document.querySelector('.mono-sound__image-wrapper');
+    const btnText = document.querySelector('.mono-sound__text');
+    
+    if (btnIcon && btnText) {
+      btnIcon.classList.toggle('mono-sound--disabled', !newValue);
+      btnText.textContent = newValue ? textContentObj.disableMono : textContentObj.enableMono;
+    }
   }
 });
 
-browserAPI.storage.onChanged.addListener((changes) => {
-  if (changes.monoEnabled) setMono(Boolean(changes.monoEnabled.newValue));
+browserAPI.runtime.onMessage.addListener(async (msg, sender, sendResponse) => {
+  if (msg && msg.action === 'languageChanged') {
+    await loadLanguage();
+    
+    const btnText = document.querySelector('.mono-sound__text');
+    const btnIcon = document.querySelector('.mono-sound__image-wrapper');
+
+    if (btnText && btnIcon) {
+      const isEnabled = !btnIcon.classList.contains('mono-sound--disabled');
+      btnText.textContent = isEnabled ? textContentObj.disableMono : textContentObj.enableMono;
+    }
+
+    if (sendResponse) sendResponse({ ok: true });
+  }
+  return true;
 });
