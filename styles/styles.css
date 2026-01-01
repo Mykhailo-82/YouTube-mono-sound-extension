@@ -28,6 +28,12 @@ tp-yt-iron-dropdown:has([data-mono-button="true"]) #contentWrapper {
   display: flex;
   align-items: center;
 }
+.mono-sound:focus {
+  background-color: #ffffff33;
+  outline: 2px solid #f2f2f2;
+  outline-offset: -2px;
+  border-radius: 8px;
+}
 
 .mono-sound:hover {
   background-color: #ffffff33;

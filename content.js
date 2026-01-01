@@ -122,6 +122,11 @@ async function createToggleButton() {
   const btn = document.createElement('div');
   btn.className = 'mono-sound';
   btn.dataset.monoButton = 'true';
+  btn.tabIndex = 0;
+  
+  btn.setAttribute('role', 'button');
+  btn.setAttribute('aria-pressed', isEnabled.toString());
+  
   if (lightTheme) btn.classList.add('light');
 
   const iconWrapper = document.createElement('div');
@@ -134,6 +139,7 @@ async function createToggleButton() {
   svg.setAttribute('height', '24');
   svg.setAttribute('viewBox', '0 0 24 24');
   svg.style.pointerEvents = 'none';
+  svg.setAttribute('aria-hidden', 'true');
 
   const path = document.createElementNS(svgNS, 'path');
   path.setAttribute('fill', 'none');
@@ -151,13 +157,24 @@ async function createToggleButton() {
 
   btn.append(iconWrapper, text);
 
-  btn.addEventListener('click', async (e) => {
+  const toggleState = async (e) => {
     e.preventDefault();
     e.stopPropagation();
     const currentData = await storageGet('monoEnabled');
     const newState = !Boolean(currentData.monoEnabled);
     await storageSet({ monoEnabled: newState });
+    
+    btn.setAttribute('aria-pressed', newState.toString());
+    
     await ensureAudioContext();
+  };
+
+  btn.addEventListener('click', toggleState);
+
+  btn.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      toggleState(e);
+    }
   });
 
   return btn;
